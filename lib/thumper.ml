@@ -221,20 +221,50 @@ module Server = struct
     Writer.flushed writer
   ;;
 
-  let not_found (_request : request) writer =
-    let body = In_channel.read_all "templates/not_found.html" in
+  (* let not_found (_request : request) writer = *)
+  (*   let body = In_channel.read_all "templates/not_found.html" in *)
+  (*   let headers = [ "Content-Type", "text/html; charset=utf-8" ] in *)
+  (*   let%bind () = write_response Response.S404_Not_Found body writer ~headers () in *)
+  (*   return Response.S404_Not_Found *)
+  (* ;; *)
+  (**)
+  (* let server_error (_request : request) writer = *)
+  (*   let body = In_channel.read_all "templates/server_error.html" in *)
+  (*   let headers = [ "Content-Type", "text/html; charset=utf-8" ] in *)
+  (*   let%bind _ = *)
+  (*     write_response Response.S500_Internal_Server_Error body writer ~headers () *)
+  (*   in *)
+  (*   return Response.S500_Internal_Server_Error *)
+  (* ;; *)
+
+  let not_found (_req : request) writer =
+    let data =
+      {|
+    <doctype html>
+    <body>
+    <h1> 404 Not Found </h1>
+    </body>
+    |}
+    in
     let headers = [ "Content-Type", "text/html; charset=utf-8" ] in
-    let%bind () = write_response Response.S404_Not_Found body writer ~headers () in
-    return Response.S404_Not_Found
+    let status = Response.S404_Not_Found in
+    let%bind _ = write_response status data writer ~headers () in
+    return status
   ;;
 
-  let server_error (_request : request) writer =
-    let body = In_channel.read_all "templates/server_error.html" in
-    let headers = [ "Content-Type", "text/html; charset=utf-8" ] in
-    let%bind _ =
-      write_response Response.S500_Internal_Server_Error body writer ~headers ()
+  let server_error (_req : request) writer =
+    let data =
+      {|
+    <doctype html>
+    <body>
+    <h1> 500 Internal Server Error </h1>
+    </body>
+    |}
     in
-    return Response.S500_Internal_Server_Error
+    let headers = [ "Content-Type", "text/html; charset=utf-8" ] in
+    let status = Response.S500_Internal_Server_Error in
+    let%bind _ = write_response status data writer ~headers () in
+    return status
   ;;
 
   let server =
