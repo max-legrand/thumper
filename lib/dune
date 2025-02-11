@@ -1,2 +1,6 @@
 (library
- (name thumper))
+ (name thumper)
+ (libraries core spice async str ezgzip)
+ (preprocess (pps ppx_jane ppx_deriving.show ppx_deriving.enum))
+ (modules response thumper)
+)

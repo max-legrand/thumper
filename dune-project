@@ -5,24 +5,19 @@
 (generate_opam_files true)
 
 (source
- (github username/reponame))
+ (github max-legrand/thumper))
 
-(authors "Author Name")
+(authors "Maxwell Legrand")
 
-(maintainers "Maintainer Name")
-
-(license LICENSE)
-
-(documentation https://url/to/documentation)
+(license MIT)
 
 (package
  (name thumper)
- (synopsis "A short synopsis")
- (description "A longer description")
+ (synopsis "A small, lightweight, and opinionated web server")
  (depends
    ocaml dune lwt stdio base cmdliner core core_unix
+   yojson async ppx_deriving async_ssl ezgzip yaml
  )
- (tags
-  (topics "to describe" your project)))
+)
 
 ; See the complete stanza docs at https://dune.readthedocs.io/en/stable/reference/dune-project/index.html
