@@ -1,0 +1,3 @@
+[submodule "lib/spice"]
+	path = lib/spice
+	url = https://github.com/max-legrand/spice.git
