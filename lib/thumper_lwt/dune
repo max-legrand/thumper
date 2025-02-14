@@ -1,0 +1,5 @@
+(library
+ (name thumper_lwt)
+ (libraries core spice lwt str ezgzip thumper)
+ (preprocess (pps ppx_jane ppx_deriving.show ppx_deriving.enum))
+)

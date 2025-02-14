@@ -1,6 +1,6 @@
 open Core
 open Async
-open Thumper
+open Thumper_async
 open Thumper__Response
 
 module Config = struct
@@ -66,11 +66,11 @@ let serve_test (req : Server.request) conn =
 let not_found (_req : Server.request) conn =
   let data =
     {|
-    <doctype html>
-    <body>
-    <h1> 404 Not Found </h1>
-    </body>
-    |}
+           <doctype html>
+           <body>
+           <h1> 404 Not Found </h1>
+           </body>
+           |}
   in
   let headers = [ "Content-Type", "text/html; charset=utf-8" ] in
   let status = S404_Not_Found in
@@ -81,11 +81,11 @@ let not_found (_req : Server.request) conn =
 let ise (_req : Server.request) conn =
   let data =
     {|
-    <doctype html>
-    <body>
-    <h1> 500 Internal Server Error </h1>
-    </body>
-    |}
+           <doctype html>
+           <body>
+           <h1> 500 Internal Server Error </h1>
+           </body>
+           |}
   in
   let headers = [ "Content-Type", "text/html; charset=utf-8" ] in
   let status = S500_Internal_Server_Error in
