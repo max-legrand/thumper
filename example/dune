@@ -1,5 +1,4 @@
 (executable
- (public_name example)
  (name main)
  (libraries thumper yaml async yojson thumper_async)
  (preprocess (pps ppx_jane ppx_deriving.show ppx_deriving.enum)))
