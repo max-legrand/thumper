@@ -154,8 +154,8 @@ module Server = struct
         let name = String.strip name in
         let value = String.strip value in
         (* Debug each header being checked *)
-        if String.Caseless.equal name "accept-encoding"
-        then Spice.debugf "Found Accept-Encoding header with value: '%s'" value;
+        (* if String.Caseless.equal name "accept-encoding" *)
+        (* then Spice.debugf "Found Accept-Encoding header with value: '%s'" value; *)
         String.Caseless.equal name "accept-encoding"
         && String.is_substring ~substring:"gzip" value)
   ;;
@@ -194,7 +194,7 @@ module Server = struct
         in
         let accepts = accept_gzip_encoding request_headers in
         let should_compress = should_compress content_type in
-        Spice.debugf "Accepts=%b ; Should compress=%b" accepts should_compress;
+        (* Spice.debugf "Accepts=%b ; Should compress=%b" accepts should_compress; *)
         if accepts && should_compress
         then (
           let compressed = gzip_compress body in
