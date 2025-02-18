@@ -472,19 +472,27 @@ module Server = struct
       in
       Lwt_list.iter_s
         (fun entry ->
-           let full_path = Filename.concat dir entry in
-           Lwt.catch
-             (fun () ->
-                Lwt_unix.stat full_path
-                >>= fun stat ->
-                let kind = stat.st_kind in
-                match kind with
-                | Core_unix.S_REG ->
-                  let%bind _ = cache_file full_path in
-                  Lwt.return_unit
-                | Core_unix.S_DIR -> cache_directory full_path
-                | _ -> Lwt.return_unit)
-             (fun _ -> Lwt.return_unit))
+           (* Skip "." and ".." explicitly *)
+           if String.equal entry "." || String.equal entry ".."
+           then Lwt.return_unit
+           else (
+             let full_path = Filename.concat dir entry in
+             Lwt.catch
+               (fun () ->
+                  Lwt_unix.lstat full_path
+                  >>= fun stat ->
+                  let kind = stat.Lwt_unix.st_kind in
+                  match kind with
+                  | Lwt_unix.S_REG ->
+                    let%bind _ = cache_file full_path in
+                    Lwt.return_unit
+                  | Lwt_unix.S_DIR ->
+                    (* Skip symbolic links to avoid infinite loops *)
+                    (match kind with
+                     | Lwt_unix.S_LNK -> cache_directory full_path
+                     | _ -> Lwt.return_unit)
+                  | _ -> Lwt.return_unit)
+               (fun _ -> Lwt.return_unit)))
         items
     in
     let%bind () = cache_directory dirpath in
@@ -510,15 +518,17 @@ module Server = struct
             ; "ETag", Printf.sprintf "%Lx-%f" (Int64.of_string cached.size) cached.mtime
             ]
           in
-          let header_string =
-            List.fold headers ~init:"" ~f:(fun acc (key, value) ->
-                acc ^ Printf.sprintf "%s: %s\r\n" key value)
+          let%bind _ =
+            write_response
+              S200_OK
+              cached.content
+              oc
+              ~headers
+              ~compression:true
+              ~request_headers:request.headers
+              ()
           in
-          let response =
-            Printf.sprintf "HTTP/1.1 200 OK\r\n%s\r\n%s" header_string cached.content
-          in
-          Lwt_io.write oc response
-          >>= fun () -> Lwt_io.flush oc >>= fun () -> Lwt.return S200_OK
+          Lwt.return S200_OK
         | None -> !server.not_found request oc
       in
       if not (String.is_suffix prefix ~suffix:"/*")
