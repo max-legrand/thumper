@@ -124,12 +124,18 @@ module Server = struct
               | [] -> acc
               | hd :: tl ->
                 let key, value = String.lsplit2_exn ~on:':' hd in
-                parse_request_headers tl ((key, value) :: acc)
+                let value = String.strip value in
+                let value = String.split value ~on:' ' |> List.hd in
+                parse_request_headers tl ((String.strip key, value) :: acc)
             in
             let headers =
               parse_request_headers
                 (Array.sub ~pos:1 ~len:(Array.length items - 1) items |> Array.to_list)
                 []
+              |> List.filter_map ~f:(fun (key, value_opt) ->
+                  match value_opt with
+                  | None -> None
+                  | Some value -> Some (key, value))
             in
             Ok { method_; route; headers; body = "" }))
   ;;
@@ -143,7 +149,26 @@ module Server = struct
       (match parse_header header with
        | Error e -> Error e
        | Ok request ->
-         if x > 1 then Ok { request with body = contents.(1) } else Ok request)
+         if x > 1
+         then (
+           let body =
+             String.concat
+               ~sep:"\r\n\r\n"
+               (Array.sub ~pos:1 ~len:(Array.length contents - 1) contents
+                |> Array.to_list)
+           in
+           Ok { request with body })
+         else (
+           let content_length =
+             List.find_map request.headers ~f:(function
+                 | "Content-Length", value -> Some (Int.of_string value)
+                 | _ -> None)
+           in
+           match content_length with
+           | Some length ->
+             let body = String.sub message ~pos:(String.length header + 4) ~len:length in
+             Ok { request with body }
+           | None -> Ok request))
   ;;
 
   (** Initialize the buffer to 0 *)
@@ -334,16 +359,20 @@ module Server = struct
 
   let read_body ic content_length =
     if content_length > 0
-    then (
-      let buffer = Bytes.create content_length in
+    then
       Lwt.catch
         (fun () ->
-           Lwt_io.read_into ic buffer 0 content_length
-           >>= fun bytes_read ->
+           Lwt_io.read ic ~count:content_length
+           >>= fun content ->
+           let bytes_read = String.length content in
            if bytes_read = content_length
-           then Lwt.return (Some (Bytes.to_string buffer))
-           else Lwt.return None)
-        (fun _ -> Lwt.return None))
+           then Lwt.return (Some content)
+           else (
+             Spice.errorf "Incomplete read: got %d of %d bytes" bytes_read content_length;
+             Lwt.return None))
+        (fun e ->
+           Spice.errorf "Error reading body: %s" (Exn.to_string e);
+           Lwt.return None)
     else Lwt.return (Some "")
   ;;
 
@@ -354,14 +383,31 @@ module Server = struct
          >>= fun input_channel ->
          Lwt.return (Lwt_io.of_fd ~mode:Lwt_io.Output client_sock)
          >>= fun output_channel ->
-         read_headers [] input_channel
-         >>= fun headers ->
+         (let%bind headers = read_headers [] input_channel in
+          (* Print headers *)
+          let content_length =
+            List.find_map headers ~f:(fun line ->
+                if String.is_prefix ~prefix:"Content-Length:" line
+                then (
+                  let value = String.drop_prefix line 16 in
+                  (* This was incorrect *)
+                  let stripped = String.strip value in
+                  Some (Int.of_string stripped))
+                else None)
+            |> Option.value ~default:0
+          in
+          let%bind body = read_body input_channel content_length in
+          match body with
+          | Some b when String.length b > 0 -> Lwt.return (headers, b)
+          | _ -> Lwt.return (headers, ""))
+         >>= fun (headers, body) ->
          match headers with
          | [] -> Lwt.return_unit
          | request_line :: header_lines ->
-           (match
-              parse_msg (String.concat ~sep:"\r\n" (request_line :: header_lines))
-            with
+           let raw_request =
+             String.concat ~sep:"\r\n" (request_line :: header_lines) ^ "\r\n\r\n" ^ body
+           in
+           (match parse_msg raw_request with
             | Ok request ->
               (match find_matching_route request with
                | None ->

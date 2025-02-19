@@ -91,7 +91,26 @@ module Server = struct
       (match parse_header header with
        | Error e -> Error e
        | Ok request ->
-         if x > 1 then Ok { request with body = contents.(1) } else Ok request)
+         if x > 1
+         then (
+           let body =
+             String.concat
+               ~sep:"\r\n\r\n"
+               (Array.sub ~pos:1 ~len:(Array.length contents - 1) contents
+                |> Array.to_list)
+           in
+           Ok { request with body })
+         else (
+           let content_length =
+             List.find_map request.headers ~f:(function
+                 | "Content-Length", value -> Some (Int.of_string value)
+                 | _ -> None)
+           in
+           match content_length with
+           | Some length ->
+             let body = String.sub message ~pos:(String.length header + 4) ~len:length in
+             Ok { request with body }
+           | None -> Ok request))
   ;;
 
   (** Initialize the buffer to 0 *)
@@ -302,11 +321,13 @@ module Server = struct
     if content_length > 0
     then (
       let buffer = Bytes.create content_length in
-      let%bind bytes_read = Reader.really_read reader buffer ~pos:0 ~len:content_length in
-      match bytes_read with
-      | `Ok -> return (Some (Bytes.to_string buffer))
-      (* Mismatch of content length and data *)
-      | `Eof _ -> return None)
+      match%bind Reader.read reader ~pos:0 ~len:content_length buffer with
+      | `Eof -> return None
+      | `Ok bytes_read when bytes_read = content_length ->
+        return (Some (Bytes.to_string buffer))
+      | `Ok bytes_read ->
+        Spice.errorf "Incomplete read: got %d of %d bytes" bytes_read content_length;
+        return None)
     else return (Some "")
   ;;
 
@@ -315,7 +336,26 @@ module Server = struct
     match headers with
     | [] -> return ()
     | request_line :: header_lines ->
-      (match parse_msg (String.concat ~sep:"\r\n" (request_line :: header_lines)) with
+      let content_length =
+        List.find_map headers ~f:(fun line ->
+            if String.is_prefix ~prefix:"Content-Length:" line
+            then (
+              let value = String.drop_prefix line 15 in
+              let stripped = String.strip value in
+              Some (Int.of_string stripped))
+            else None)
+        |> Option.value ~default:0
+      in
+      (* Read the empty line after headers *)
+      let%bind _ = Reader.read_line reader in
+      (* Read body if present *)
+      let%bind body = read_body reader content_length in
+      let full_request =
+        String.concat ~sep:"\r\n" (request_line :: header_lines)
+        ^ "\r\n\r\n"
+        ^ Option.value body ~default:""
+      in
+      (match parse_msg full_request with
        | Ok request ->
          (match find_matching_route request with
           | None ->
